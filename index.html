@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EmotionBuddy - Labo Edition</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- React & ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <!-- Babel for JSX -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- Face API -->
+    <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+    
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Comic+Neue:wght@400;700&family=VT323&display=swap');
+        
+        body {
+            font-family: 'Comic Neue', cursive;
+            background-color: #E3D0B9;
+        }
+        
+        .font-comic { font-family: 'Comic Neue', cursive; }
+        .font-mono { font-family: 'VT323', monospace; }
+        
+        .bg-stripes {
+            background: repeating-linear-gradient(45deg, #000, #000 10px, transparent 10px, transparent 20px);
+        }
+        .bg-stripes-dark {
+            background: repeating-linear-gradient(45deg, #1a1a1a, #1a1a1a 10px, #000 10px, #000 20px);
+        }
+        
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #D0C0A0; }
+        ::-webkit-scrollbar-thumb { background: #A09070; border-radius: 4px; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+        const noiseSvg = `data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E`;
+
+        // --- ICON COMPONENTS ---
+        const IconBase = ({ children, size = 24, className = "" }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>{children}</svg>
+        );
+        const Camera = (p) => <IconBase {...p}><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></IconBase>;
+        const Zap = (p) => <IconBase {...p}><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></IconBase>;
+        const Sparkles = (p) => <IconBase {...p}><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L12 3Z"/><path d="M5 3v4"/><path d="M9 5H1"/><path d="M5 7v2"/></IconBase>;
+        const Smile = (p) => <IconBase {...p}><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></IconBase>;
+        const Frown = (p) => <IconBase {...p}><circle cx="12" cy="12" r="10"/><path d="M16 16s-1.5-2-4-2-4 2-4 2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></IconBase>;
+        const Meh = (p) => <IconBase {...p}><circle cx="12" cy="12" r="10"/><line x1="8" y1="15" x2="16" y2="15"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></IconBase>;
+        const Loader2 = (p) => <IconBase {...p} className={`${p.className} animate-spin`}><path d="M21 12a9 9 0 1 1-6.219-8.56"/></IconBase>;
+        const Volume2 = (p) => <IconBase {...p}><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></IconBase>;
+        const Activity = (p) => <IconBase {...p}><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></IconBase>;
+        const Heart = (p) => <IconBase {...p}><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></IconBase>;
+        const Baby = (p) => <IconBase {...p}><path d="M9 12h.01"/><path d="M15 12h.01"/><path d="M10 16c.5.3 1.2.5 2 .5s1.5-.2 2-.5"/><path d="M19 6.3a9 9 0 0 1 1.8 3.9 2 2 0 0 1 0 3.6 9 9 0 0 1-17.6 0 2 2 0 0 1 0-3.6A9 9 0 0 1 12 3c2 0 3.5 1.1 3.5 2.5s-.9 2.5-2 2.5c-.8 0-1.5-.4-1.5-1"/></IconBase>;
+        const User = (p) => <IconBase {...p}><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></IconBase>;
+        const Settings = (p) => <IconBase {...p}><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.1a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></IconBase>;
+        const Play = (p) => <IconBase {...p}><polygon points="5 3 19 12 5 21 5 3"/></IconBase>;
+        const Save = (p) => <IconBase {...p}><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1-2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></IconBase>;
+
+        // --- COMPONENTS ---
+        const PremiumFace = ({ expression }) => {
+            const palette = {
+                neutral: { from: "#FFFFFF", to: "#E2E8F0", shadow: "#94A3B8", eye: "#475569" },
+                happy:   { from: "#FEF08A", to: "#F59E0B", shadow: "#D97706", eye: "#78350F" },
+                sad:     { from: "#E0F2FE", to: "#3B82F6", shadow: "#1D4ED8", eye: "#1E3A8A" },
+                angry:   { from: "#FEE2E2", to: "#EF4444", shadow: "#B91C1C", eye: "#7F1D1D" },
+                surprised: { from: "#F3E8FF", to: "#A855F7", shadow: "#7E22CE", eye: "#581C87" },
+                fearful: { from: "#F1F5F9", to: "#94A3B8", shadow: "#475569", eye: "#334155" },
+                disgusted: { from: "#DCFCE7", to: "#22C55E", shadow: "#15803D", eye: "#14532D" }
+            };
+            const p = palette[expression] || palette.neutral;
+            
+            const faceStyle = {
+                background: `linear-gradient(135deg, ${p.from}, ${p.to})`,
+                filter: `drop-shadow(0px 8px 0px ${p.shadow})`, 
+            };
+
+            const renderEyes = () => {
+                const eyeColor = p.eye;
+                switch(expression) {
+                    case 'happy': 
+                        return (
+                            <g>
+                                <path d="M70 110 Q100 80 130 110" fill="none" stroke={eyeColor} strokeWidth="12" strokeLinecap="round"/>
+                                <path d="M190 110 Q220 80 250 110" fill="none" stroke={eyeColor} strokeWidth="12" strokeLinecap="round"/>
+                            </g>
+                        );
+                    case 'sad': 
+                        return (
+                            <g>
+                                <circle cx="100" cy="130" r="18" fill={eyeColor}/>
+                                <circle cx="220" cy="130" r="18" fill={eyeColor}/>
+                                <path d="M70 100 L120 110" stroke={eyeColor} strokeWidth="8" strokeLinecap="round"/>
+                                <path d="M250 100 L200 110" stroke={eyeColor} strokeWidth="8" strokeLinecap="round"/>
+                                <circle cx="94" cy="124" r="6" fill="white"/>
+                                <circle cx="214" cy="124" r="6" fill="white"/>
+                            </g>
+                        );
+                    case 'angry': 
+                        return (
+                            <g>
+                                <path d="M70 100 L130 130" stroke={eyeColor} strokeWidth="10" strokeLinecap="round"/>
+                                <path d="M250 100 L190 130" stroke={eyeColor} strokeWidth="10" strokeLinecap="round"/>
+                                <circle cx="100" cy="140" r="12" fill={eyeColor}/>
+                                <circle cx="220" cy="140" r="12" fill={eyeColor}/>
+                            </g>
+                        );
+                    case 'surprised':
+                    case 'fearful': 
+                        return (
+                            <g>
+                                <circle cx="100" cy="120" r="22" fill="white"/>
+                                <circle cx="100" cy="120" r="8" fill={eyeColor}/>
+                                <circle cx="220" cy="120" r="22" fill="white"/>
+                                <circle cx="220" cy="120" r="8" fill={eyeColor}/>
+                            </g>
+                        );
+                    default: 
+                        return (
+                            <g>
+                                <ellipse cx="100" cy="120" rx="14" ry="20" fill={eyeColor}/>
+                                <ellipse cx="220" cy="120" rx="14" ry="20" fill={eyeColor}/>
+                                <circle cx="96" cy="112" r="6" fill="white" opacity="0.8"/>
+                                <circle cx="216" cy="112" r="6" fill="white" opacity="0.8"/>
+                            </g>
+                        );
+                }
+            };
+
+            const renderMouth = () => {
+                const mouthColor = p.eye;
+                switch(expression) {
+                    case 'happy': return <path d="M100 190 Q160 250 220 190" fill="none" stroke={mouthColor} strokeWidth="10" strokeLinecap="round"/>;
+                    case 'sad': return <path d="M110 230 Q160 180 210 230" fill="none" stroke={mouthColor} strokeWidth="10" strokeLinecap="round"/>;
+                    case 'angry': return <rect x="120" y="210" width="80" height="12" rx="6" fill={mouthColor}/>;
+                    case 'surprised': return <circle cx="160" cy="210" r="20" fill={mouthColor}/>;
+                    default: return <path d="M130 210 Q160 220 190 210" fill="none" stroke={mouthColor} strokeWidth="8" strokeLinecap="round"/>;
+                }
+            };
+
+            return (
+                <div className="relative w-64 h-64 md:w-80 md:h-80 flex items-center justify-center transition-all duration-700 ease-out transform hover:scale-105">
+                    <div className="w-full h-full rounded-[3rem] relative overflow-hidden transition-all duration-700 border-4 border-white/50" style={faceStyle}>
+                        <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-br from-white/30 to-transparent pointer-events-none opacity-50"></div>
+                        <svg viewBox="0 0 320 320" className="w-full h-full p-4 relative z-10">
+                            <g className="transition-all duration-300">
+                                {renderEyes()}
+                                {renderMouth()}
+                            </g>
+                        </svg>
+                    </div>
+                </div>
+            );
+        };
+
+        const DashboardItem = ({ exp, icon: Icon, isActive, onClick }) => (
+            <div onClick={onClick} className={`relative flex flex-col items-center justify-center cursor-pointer transition-all duration-200 group ${isActive ? 'scale-105 translate-y-1' : 'hover:-translate-y-1'}`}>
+                <div className={`w-14 h-14 rounded-full border-2 flex items-center justify-center relative ${isActive ? 'bg-[#FF6B6B] border-[#D63031] text-white shadow-inner' : 'bg-[#F0E6D2] border-[#C0B090] text-[#8D7F60] shadow-[0_4px_0_#C0B090]'}`}>
+                    <Icon size={24} strokeWidth={2.5} />
+                </div>
+                <span className={`mt-2 text-[10px] font-black uppercase tracking-wider bg-white/50 px-2 rounded-sm ${isActive ? 'text-[#D63031]' : 'text-[#8D7F60]'}`}>{exp}</span>
+            </div>
+        );
+
+        const Screw = ({ className }) => (
+            <div className={`w-3 h-3 rounded-full bg-[#B0A080] flex items-center justify-center border border-[#908060] shadow-inner ${className}`}>
+                <div className="w-full h-[1px] bg-[#807050] rotate-45 transform"></div>
+                <div className="w-full h-[1px] bg-[#807050] -rotate-45 absolute transform"></div>
+            </div>
+        );
+
+        // --- MAIN APP ---
+        const EmotionBuddy = () => {
+            const videoRef = useRef(null);
+            const [permissionGranted, setPermissionGranted] = useState(false);
+            const [currentExpression, setCurrentExpression] = useState('neutral');
+            const [modelLoaded, setModelLoaded] = useState(false);
+            const [isFaceApiReady, setIsFaceApiReady] = useState(false);
+            const [geminiResponse, setGeminiResponse] = useState('');
+            const [displayedText, setDisplayedText] = useState('');
+            const [isGenerating, setIsGenerating] = useState(false);
+            const [isSpeaking, setIsSpeaking] = useState(false);
+            const [confidence, setConfidence] = useState(0);
+            const [voiceMode, setVoiceMode] = useState('child');
+            
+            const [apiKey, setApiKey] = useState('AIzaSyC4IO61n_EGJ5Pcf5UTbcqOqwo2KHBxzck');
+            const [showSettings, setShowSettings] = useState(false);
+
+            useEffect(() => {
+                const loadFaceApi = async () => {
+                    try {
+                        if (!window.faceapi) return;
+                        const MODEL_URL = 'https://justadudewhohacks.github.io/face-api.js/models';
+                        await Promise.all([
+                            window.faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
+                            window.faceapi.nets.faceExpressionNet.loadFromUri(MODEL_URL)
+                        ]);
+                        setModelLoaded(true);
+                        setIsFaceApiReady(true);
+                    } catch (err) {
+                        console.error("Model load error", err);
+                    }
+                };
+                loadFaceApi();
+            }, []);
+
+            useEffect(() => {
+                if (geminiResponse && typeof geminiResponse === 'string') {
+                    let i = 0;
+                    setDisplayedText('');
+                    const timer = setInterval(() => {
+                        if (i < geminiResponse.length) {
+                            setDisplayedText((prev) => prev + geminiResponse.charAt(i));
+                            i++;
+                        } else {
+                            clearInterval(timer);
+                        }
+                    }, 40);
+                    return () => clearInterval(timer);
+                } else {
+                    setDisplayedText('');
+                }
+            }, [geminiResponse]);
+
+            const saveApiKey = (key) => {
+                setApiKey(key);
+                localStorage.setItem('gemini_api_key', key);
+                setShowSettings(false);
+            };
+
+            const startVideo = async () => {
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                    if (videoRef.current) {
+                        videoRef.current.srcObject = stream;
+                        setPermissionGranted(true);
+                    }
+                } catch (err) {
+                    console.error("Camera denied");
+                }
+            };
+
+            const handleVideoPlay = () => {
+                if (!isFaceApiReady || !videoRef.current) return;
+                const interval = setInterval(async () => {
+                    if (videoRef.current && !videoRef.current.paused && !videoRef.current.ended) {
+                        try {
+                            const detections = await window.faceapi.detectAllFaces(
+                                videoRef.current, 
+                                new window.faceapi.TinyFaceDetectorOptions()
+                            ).withFaceExpressions();
+
+                            if (detections && detections.length > 0) {
+                                const expressions = detections[0].expressions;
+                                const sorted = Object.keys(expressions).sort((a, b) => expressions[b] - expressions[a]);
+                                const topExpression = sorted[0];
+                                const detectedConfidence = expressions[topExpression];
+                                if (detectedConfidence > 0.3) {
+                                    setCurrentExpression(topExpression);
+                                    setConfidence(detectedConfidence);
+                                }
+                            }
+                        } catch (e) {}
+                    }
+                }, 300);
+                return () => clearInterval(interval);
+            };
+
+            const pcmToWav = (pcmData, sampleRate = 24000) => {
+                const numChannels = 1;
+                const bitsPerSample = 16;
+                const byteRate = (sampleRate * numChannels * bitsPerSample) / 8;
+                const blockAlign = (numChannels * bitsPerSample) / 8;
+                const dataSize = pcmData.byteLength;
+                const buffer = new ArrayBuffer(44 + dataSize);
+                const view = new DataView(buffer);
+                const writeString = (offset, string) => {
+                    for (let i = 0; i < string.length; i++) view.setUint8(offset + i, string.charCodeAt(i));
+                };
+                writeString(0, 'RIFF');
+                view.setUint32(4, 36 + dataSize, true);
+                writeString(8, 'WAVE');
+                writeString(12, 'fmt ');
+                view.setUint32(16, 16, true);
+                view.setUint16(20, 1, true);
+                view.setUint16(22, numChannels, true);
+                view.setUint32(24, sampleRate, true);
+                view.setUint32(28, byteRate, true);
+                view.setUint16(32, blockAlign, true);
+                view.setUint16(34, bitsPerSample, true);
+                writeString(36, 'data');
+                view.setUint32(40, dataSize, true);
+                const pcmBytes = new Uint8Array(pcmData);
+                const wavBytes = new Uint8Array(buffer, 44);
+                wavBytes.set(pcmBytes);
+                return buffer;
+            };
+
+            const generateMagic = async () => {
+                if (!apiKey) {
+                    setShowSettings(true);
+                    return;
+                }
+                setIsGenerating(true);
+                setGeminiResponse('');
+                setDisplayedText('');
+                try {
+                    let systemInstruction = "";
+                    if (voiceMode === 'child') {
+                        systemInstruction = `You are a cute, magical cartoon buddy inside a cardboard robot. Current User Expression: "${currentExpression}". Generate a VERY short, playful, magical sentence (max 8 words). Style: High energy, simple words, like a game character.`;
+                    } else {
+                        systemInstruction = `You are a calm, empathetic mindfulness coach. Current User Expression: "${currentExpression}". Generate a short, soothing, warm sentence (max 10 words). Style: Gentle, mature, grounding.`;
+                    }
+                    const textResp = await fetch(
+                        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`,
+                        {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ contents: [{ parts: [{ text: systemInstruction }] }] }),
+                        }
+                    );
+                    const textData = await textResp.json();
+                    if(textData.error) throw new Error(textData.error.message);
+                    const aiText = textData.candidates?.[0]?.content?.parts?.[0]?.text || "I am here with you.";
+                    setGeminiResponse(aiText);
+
+                    const selectedVoice = voiceMode === 'child' ? "Puck" : "Kore";
+                    const ttsResp = await fetch(
+                        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=${apiKey}`,
+                        {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                contents: [{ parts: [{ text: aiText }] }],
+                                generationConfig: {
+                                    responseModalities: ["AUDIO"],
+                                    speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: selectedVoice } } }
+                                }
+                            }),
+                        }
+                    );
+                    const ttsData = await ttsResp.json();
+                    const audioContent = ttsData.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+                    if (audioContent) {
+                        setIsSpeaking(true);
+                        const binaryString = atob(audioContent);
+                        const len = binaryString.length;
+                        const bytes = new Uint8Array(len);
+                        for (let i = 0; i < len; i++) bytes[i] = binaryString.charCodeAt(i);
+                        const wavBuffer = pcmToWav(bytes.buffer);
+                        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                        const audioBuffer = await audioContext.decodeAudioData(wavBuffer);
+                        const source = audioContext.createBufferSource();
+                        source.buffer = audioBuffer;
+                        source.connect(audioContext.destination);
+                        source.start(0);
+                        source.onended = () => setIsSpeaking(false);
+                    }
+                } catch (error) {
+                    console.error("Gemini Error:", error);
+                    setGeminiResponse("Please check your API Key in Settings!");
+                    setIsSpeaking(false);
+                } finally {
+                    setIsGenerating(false);
+                }
+            };
+
+            return (
+                <div className="min-h-screen font-mono text-slate-800 flex flex-col selection:bg-orange-200 overflow-hidden relative" style={{ backgroundColor: '#E3D0B9' }}>
+                    
+                    {/* SETTINGS MODAL */}
+                    {showSettings && (
+                        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+                            <div className="bg-[#F0E6D2] p-8 rounded-xl border-4 border-[#C0B090] shadow-2xl max-w-md w-full m-4 relative transform rotate-1">
+                                <Screw className="absolute top-2 left-2" /><Screw className="absolute top-2 right-2" /><Screw className="absolute bottom-2 left-2" /><Screw className="absolute bottom-2 right-2" />
+                                <h2 className="text-xl font-black text-[#5D4037] mb-4 text-center">INSERT KEY CARD</h2>
+                                <p className="text-sm text-[#8D7F60] mb-4 text-center font-comic">Paste your Gemini API Key to activate the magic circuits!</p>
+                                <input 
+                                    type="password" 
+                                    placeholder="AIzaSy..." 
+                                    className="w-full p-3 rounded-lg border-2 border-[#C0B090] bg-white font-mono text-sm mb-4 focus:outline-none focus:border-[#FF6B6B]"
+                                    onKeyDown={(e) => {if(e.key === 'Enter') saveApiKey(e.target.value)}}
+                                />
+                                <div className="flex justify-end gap-2">
+                                    <button onClick={() => setShowSettings(false)} className="px-4 py-2 text-[#8D7F60] font-bold hover:bg-black/5 rounded-lg">CANCEL</button>
+                                    <button onClick={(e) => saveApiKey(e.target.previousSibling.previousSibling.value)} className="px-4 py-2 bg-[#4ECDC4] text-white font-bold rounded-lg border-b-4 border-[#3DBDB4] active:border-b-0 active:translate-y-1">SAVE</button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    <div className="absolute inset-0 opacity-20 pointer-events-none" style={{ backgroundImage: `url("${noiseSvg}")` }}></div>
+                    <div className="absolute top-0 left-0 w-full h-2 bg-stripes opacity-30"></div>
+
+                    <header className="relative z-10 px-6 py-4">
+                        <div className="max-w-6xl mx-auto bg-[#F0E6D2] rounded-xl border-4 border-[#C0B090] shadow-[4px_4px_0_rgba(0,0,0,0.1)] p-3 flex justify-between items-center relative">
+                            <Screw className="absolute top-2 left-2" /><Screw className="absolute top-2 right-2" /><Screw className="absolute bottom-2 left-2" /><Screw className="absolute bottom-2 right-2" />
+                            <div className="flex items-center gap-4 ml-4">
+                                <div onClick={() => setShowSettings(true)} className="bg-[#FF6B6B] p-2 rounded-lg border-2 border-[#D63031] shadow-[2px_2px_0_#D63031] text-white cursor-pointer hover:scale-105 transition-transform">
+                                    <Settings size={20} className={!apiKey ? "animate-pulse" : ""} />
+                                </div>
+                                <div><h1 className="text-2xl font-black tracking-tighter text-[#5D4037] uppercase" style={{ textShadow: '1px 1px 0 #fff' }}>Emotion<span className="text-[#FF6B6B]">Buddy</span> <span className="text-sm bg-black text-white px-1 rounded ml-1">LABO</span></h1></div>
+                            </div>
+                            <div className="mr-4 flex items-center gap-2 bg-black/5 px-3 py-1 rounded-full border border-black/10">
+                                <div className={`w-3 h-3 rounded-full border-2 border-white shadow-sm ${modelLoaded ? 'bg-[#4ECDC4]' : 'bg-red-400 animate-pulse'}`}></div>
+                                <span className="text-xs font-bold text-[#5D4037]">{modelLoaded ? 'SYSTEM: ONLINE' : 'BOOTING...'}</span>
+                            </div>
+                        </div>
+                    </header>
+
+                    <main className="relative z-10 flex-1 max-w-7xl mx-auto w-full p-4 lg:p-6 grid grid-cols-1 lg:grid-cols-2 gap-8 items-center">
+                        <div className="flex flex-col gap-6">
+                            <div className="relative bg-[#D0C0A0] p-4 rounded-xl border-4 border-[#A09070] shadow-[8px_8px_0_rgba(0,0,0,0.15)]">
+                                <Screw className="absolute top-3 left-3" /><Screw className="absolute top-3 right-3" />
+                                <div className="bg-black rounded-lg overflow-hidden border-4 border-black/80 relative aspect-video shadow-inner">
+                                    {!permissionGranted && (
+                                        <div className="absolute inset-0 flex flex-col items-center justify-center z-20 bg-stripes-dark">
+                                            <div className="bg-[#F0E6D2] p-6 rounded-xl border-4 border-dashed border-[#5D4037] transform rotate-1 shadow-xl text-center">
+                                                <h3 className="font-black text-xl mb-2 text-[#5D4037]">CAMERA MODULE</h3>
+                                                <button onClick={startVideo} className="mt-2 bg-[#4ECDC4] hover:bg-[#3DBDB4] text-white px-6 py-3 rounded-lg font-black border-b-4 border-[#2A9A93] active:border-b-0 active:translate-y-1 transition-all flex items-center gap-2 mx-auto"><Play fill="currentColor" size={20}/> INSERT COIN</button>
+                                            </div>
+                                        </div>
+                                    )}
+                                    <video ref={videoRef} autoPlay muted playsInline onPlay={handleVideoPlay} className="w-full h-full object-cover transform scale-x-[-1] opacity-90" />
+                                    <div className="absolute top-4 left-4 font-mono text-xs text-[#4ECDC4] bg-black/80 px-2 py-1 border border-[#4ECDC4] rounded-sm">REC • {confidence > 0 ? `CONF: ${confidence.toFixed(2)}` : 'WAITING...'}</div>
+                                    <div className="absolute inset-0 pointer-events-none opacity-30 flex items-center justify-center"><div className="w-10 h-1 bg-white/50"></div><div className="h-10 w-1 bg-white/50 absolute"></div><div className="w-48 h-32 border-2 border-white/30 rounded-lg"></div></div>
+                                </div>
+                                <div className="mt-3 text-center"><span className="bg-[#A09070] text-[#F0E6D2] text-[10px] font-bold px-2 py-1 rounded-sm uppercase tracking-widest shadow-[inset_0_2px_4px_rgba(0,0,0,0.2)]">Project Kit 01: Vision</span></div>
+                            </div>
+                            <div className="bg-[#F0E6D2] p-6 rounded-xl border-4 border-[#C0B090] shadow-[6px_6px_0_rgba(0,0,0,0.1)] relative">
+                                <div className="absolute -top-3 left-10 bg-[#FF6B6B] text-white text-xs font-bold px-3 py-1 transform -rotate-2 shadow-sm border border-[#D63031]">CONTROLLER</div>
+                                <div className="flex justify-between items-center gap-2">
+                                    {[{ id: 'happy', icon: Smile }, { id: 'sad', icon: Frown }, { id: 'angry', icon: Zap }, { id: 'surprised', icon: Sparkles }, { id: 'neutral', icon: Meh }].map(item => (<DashboardItem key={item.id} exp={item.id} icon={item.icon} isActive={currentExpression === item.id} onClick={() => setCurrentExpression(item.id)} />))}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="flex flex-col items-center justify-center relative min-h-[500px]">
+                            <div className="relative bg-[#2A2A2A] p-8 pb-12 rounded-[2.5rem] shadow-[10px_10px_0_rgba(0,0,0,0.2)] border-t-4 border-l-4 border-white/10 border-b-8 border-r-8 border-black/40">
+                                <div className="absolute top-6 right-6 w-4 h-4 rounded-full bg-red-500 animate-pulse shadow-[0_0_10px_#ef4444]"></div>
+                                <div className="relative z-10"><PremiumFace expression={currentExpression} /></div>
+                                <div className={`absolute -right-8 top-10 z-20 w-48 transition-all duration-500 ${displayedText || isGenerating ? 'opacity-100 scale-100' : 'opacity-0 scale-90'}`}>
+                                    <div className="bg-white p-4 rounded-lg border-4 border-black shadow-[4px_4px_0_black] transform rotate-3 origin-bottom-left">
+                                        <div className="absolute bottom-4 -left-6 w-0 h-0 border-t-[10px] border-t-transparent border-r-[20px] border-r-black border-b-[10px] border-b-transparent transform rotate-12"></div>
+                                        <div className="absolute bottom-4 -left-4 w-0 h-0 border-t-[6px] border-t-transparent border-r-[16px] border-r-white border-b-[6px] border-b-transparent transform rotate-12 z-10"></div>
+                                        <div className="flex items-start gap-2">{isSpeaking && <Volume2 size={16} className="text-[#FF6B6B] animate-pulse shrink-0 mt-1" />}<p className="font-bold text-lg leading-tight font-comic">{displayedText || "..."}</p></div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="w-full max-w-sm mt-8 flex flex-col gap-4">
+                                <div className="bg-[#D0C0A0] p-1.5 rounded-full border-4 border-[#A09070] flex shadow-inner w-fit mx-auto">
+                                    <button onClick={() => setVoiceMode('child')} className={`px-4 py-2 rounded-full text-xs font-black uppercase tracking-wider flex items-center gap-2 transition-all ${voiceMode === 'child' ? 'bg-[#FF6B6B] text-white shadow-sm' : 'text-[#5D4037] hover:bg-black/5'}`}><Baby size={16} /> Puck Mode</button>
+                                    <button onClick={() => setVoiceMode('adult')} className={`px-4 py-2 rounded-full text-xs font-black uppercase tracking-wider flex items-center gap-2 transition-all ${voiceMode === 'adult' ? 'bg-[#4ECDC4] text-white shadow-sm' : 'text-[#5D4037] hover:bg-black/5'}`}><User size={16} /> Kore Mode</button>
+                                </div>
+                                <button onClick={generateMagic} disabled={isGenerating || isSpeaking} className={`group relative w-full h-20 bg-[#F0E6D2] rounded-2xl border-b-8 border-r-8 border-[#C0B090] active:border-b-0 active:border-r-0 active:translate-y-2 active:translate-x-2 transition-all ${isGenerating ? 'cursor-wait' : ''}`}>
+                                    <div className="absolute inset-0 bg-[#FF6B6B] rounded-xl border-4 border-[#D63031] flex items-center justify-center gap-3 group-active:translate-y-1 transition-transform overflow-hidden">
+                                        <div className="absolute inset-0 opacity-10 bg-[linear-gradient(45deg,transparent_25%,#000_25%,#000_50%,transparent_50%,transparent_75%,#000_75%,#000_100%)] bg-[length:10px_10px]"></div>
+                                        {isGenerating ? <Loader2 className="animate-spin text-white w-8 h-8 relative z-10" /> : <Heart className="text-white w-8 h-8 relative z-10 group-hover:scale-125 transition-transform" fill="currentColor" />}
+                                        <span className="text-2xl font-black text-white tracking-widest uppercase relative z-10 drop-shadow-md">{isGenerating ? 'BUILDING...' : 'MAGIC SWITCH'}</span>
+                                    </div>
+                                </button>
+                            </div>
+                        </div>
+                    </main>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<EmotionBuddy />);
+    </script>
+</body>
+</html>
